@@ -1,11 +1,11 @@
 import gi
-import functools
 import subprocess
 
 import gssdp
 
 gi.require_version( 'Gtk', '3.0' )
 from gi.repository import Gtk
+from gi.repository import GObject
 
 class MainWindow( object ):
   @staticmethod
@@ -25,13 +25,14 @@ class MainWindow( object ):
     builder = Gtk.Builder( ).new_from_file( 'main.glade' )
 
     self.__window = MainWindow.getAndConnect( builder, 'MainWindow', {
-      'destroy': Gtk.main_quit
+      'destroy': Gtk.main_quit,
+      'delete-event': self.__onClose
     } )
     self.__server = MainWindow.getAndConnect( builder, 'Server', {
 
     } )
     self.__refresh = MainWindow.getAndConnect( builder, 'Refresh', {
-      'clicked': functools.partial( MainWindow.refreshServers, self )
+      'clicked': self.__onRefresh
     } )
     self.__media = MainWindow.getAndConnect( builder, 'Media', {
     } )
@@ -42,25 +43,25 @@ class MainWindow( object ):
 
     } )
     self.__play = MainWindow.getAndConnect( builder, 'Play', {
-      'clicked': functools.partial( MainWindow.playSelected, self ),
-      'realize': functools.partial( MainWindow.refreshServers, self )
+      'clicked': self.__onPlay
     } )
 
-    self._booting = True
-    self.__discover = gssdp.Discover( functools.partial( MainWindow.onBrowse, self ) )
+    self.__closing = False
     self.__window.show_all( )
 
-  def refreshServers( self, button ):
-    print( 'Refrescando ...' )
-    self.__discover.start( )
+    gssdp.start( self.__onGSSDP )
 
-  def playSelected( self, button ):
-    Popen( [ self.__order.get_active_text( ) ], shell = True, stdin = None, stdout = None, stderr = None, close_fds = True )
+  def __onPlay( self, button ):
+    pass
+    #Popen( [ self.__order.get_active_text( ) ], shell = True, stdin = None, stdout = None, stderr = None, close_fds = True )
 
   def showAll( self ):
     self.__window.show_all( )
 
-  def onBrowse( self, browser, msn, locations ):
+  def __onGSSDP( self, msn, locations ):
+    if self.__closing:
+      return
+
     if locations == None:
       print( 'PERDIDO', msn )
     else:
@@ -68,7 +69,11 @@ class MainWindow( object ):
       for v in locations:
         print( v )
 
-  def onMaterialize( self ):
-    if self._booting:
-      self._booting = False
-      self.refreshServers( )
+  def __onClose( self, NotUsed1, NotUsed2 ):
+    self.__closing = True
+    gssdp.stop( )
+    return False
+
+  def __onRefresh( self, NotUsed ):
+    gssdp.stop( );
+    GObject.timeout_add( 500, gssdp.start( self.onGSSDP ) )

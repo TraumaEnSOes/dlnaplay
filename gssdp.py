@@ -1,33 +1,46 @@
-import functools
 import gi
 gi.require_version( 'GSSDP', '1.0' )
 from gi.repository import GSSDP
 
-class Discover( object ):
-  __slots__ = '__network', '__msgtype', '__client', '__browser', '__callback'
+__callback = None
+__network = None
+__msgType = None
+__client = None
+__browser = None
 
-  def __init__( self, cb, network = '0.0.0.0', msgtype = 'ssdp:all' ):
-    super( Discover, self ).__init__( )
+def start( cb, network = '0.0.0.0', msgtype = 'ssdp:all' ):
+  global __client, __browser, __callback
+  # Si ya hay un descubrimiento en marcha, no hacemos nada.
+  if __client != None:
+    if cb == __callback:
+      return
+    else:
+      raise( 'Ya hay un descubrimiento en marcha' )
+  
+  __callback = cb
+  __client = GSSDP.Client.new( )
+  __client.set_network( network )
 
-    self.__callback = cb
-    self.__network = network
-    self.__msgtype = msgtype
-    self.__client = GSSDP.Client.new( )
+  __browser = GSSDP.ResourceBrowser.new( __client, msgtype )
+  __browser.connect( 'resource-available', __available )
+  __browser.connect( 'resource-unavailable', __unavailable )
+  __browser.set_active( True )
 
-    self.__client.set_network( network )
-    self.__browser = GSSDP.ResourceBrowser.new( self.__client, msgtype )
+def stop( ):
+  global __client, __browser
 
-    self.__browser.connect( 'resource-available', functools.partial( Discover.__available, self ) )
-    self.__browser.connect( 'resource-unavailable', functools.partial( Discover.__unavailable, self ) )
+  if __client == None:
+    return
 
-  def __available( self, browser, msn, locations ):
-    self.__callback( self, msn, locations )
+  __browser.set_active( False )
+  __browser = None
+  __client = None
 
-  def __unavailable( self, browser, msn ):
-    self.__callback( self, msn, None )
+def started( ):
+  return not ( __client == None )
 
-  def start( self ):
-    self.__browser.set_active( True )
+def __available( notUsed, msn, locations ):
+  __callback( msn, locations )
 
-  def stop( self ):
-    self.__browser.set_active( False )
+def __unavailable( notUsed, msn ):
+  __callback( msn, None )
